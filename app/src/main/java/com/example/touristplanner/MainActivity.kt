@@ -1,6 +1,5 @@
 package com.example.touristplanner
 
-import android.app.TimePickerDialog
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -19,6 +18,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -32,6 +32,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -41,7 +42,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -49,10 +49,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Calendar
 import java.util.Date
-import java.util.UUID
 
 // =====================================================
-// 1. PROFESSIONAL THEME COLORS
+// 1. THEME & MODELS
 // =====================================================
 val PrimaryBlue = Color(0xFF1E3A8A)
 val AccentOrange = Color(0xFFF59E0B)
@@ -60,131 +59,50 @@ val BgLight = Color(0xFFF8FAFC)
 val TextDark = Color(0xFF1E293B)
 val TextGray = Color(0xFF64748B)
 
-val LightColors = lightColorScheme(
-    primary = PrimaryBlue,
-    secondary = AccentOrange,
-    background = BgLight,
-    surface = Color.White,
-    onPrimary = Color.White,
-    onSurface = TextDark,
-    surfaceVariant = Color(0xFFF1F5F9)
-)
+val LightColors = lightColorScheme(primary = PrimaryBlue, secondary = AccentOrange, background = BgLight, surface = Color.White, onSurface = TextDark)
+val DarkColors = darkColorScheme(primary = Color(0xFF60A5FA), secondary = AccentOrange, background = Color(0xFF0F172A), surface = Color(0xFF1E293B), onSurface = Color(0xFFF1F5F9))
 
-// =====================================================
-// 2. OOP MODEL LAYER (ABSTRACTION & INHERITANCE)
-// =====================================================
+data class Review(val author: String, val rating: Int, val comment: String)
+data class Activity(val name: String, val price: Double)
+data class ScheduledVisit(val destination: Destination, val date: Date, val time: String)
 
 abstract class Destination(
     val id: Int, val name: String, val location: String, open val baseCost: Double,
-    val rating: Double, val imageResId: Int,
-    val description: String, val latitude: Double, val longitude: Double, val weather: String
+    val rating: Double, val imageResId: Int, val description: String, val latitude: Double, val longitude: Double, val weather: String,
+    val activities: List<Activity>
 ) {
     open fun category(): String = "General"
     open fun icon(): ImageVector = Icons.Default.Place
-    open fun costForTravelers(count: Int): Double = baseCost * count
 }
 
-class Beach(id: Int, name: String, location: String, baseCost: Double, rating: Double, imageResId: Int, description: String, lat: Double, lng: Double, weather: String, val hasResort: Boolean) : Destination(id, name, location, baseCost, rating, imageResId, description, lat, lng, weather) {
-    override fun category() = "Beach"
-    override fun icon() = Icons.Default.BeachAccess
-}
+class Beach(id: Int, name: String, location: String, baseCost: Double, rating: Double, imageResId: Int, description: String, lat: Double, lng: Double, weather: String, val hasResort: Boolean, activities: List<Activity>) : Destination(id, name, location, baseCost, rating, imageResId, description, lat, lng, weather, activities) { override fun category() = "Beach"; override fun icon() = Icons.Default.BeachAccess }
+class HistoricalSite(id: Int, name: String, location: String, baseCost: Double, rating: Double, imageResId: Int, description: String, lat: Double, lng: Double, weather: String, val entryFee: Double, activities: List<Activity>) : Destination(id, name, location, baseCost, rating, imageResId, description, lat, lng, weather, activities) { override val baseCost: Double get() = super.baseCost + entryFee; override fun category() = "Historical"; override fun icon() = Icons.Default.AccountBalance }
+class AdventureSpot(id: Int, name: String, location: String, baseCost: Double, rating: Double, imageResId: Int, description: String, lat: Double, lng: Double, weather: String, val difficulty: String, activities: List<Activity>) : Destination(id, name, location, baseCost, rating, imageResId, description, lat, lng, weather, activities) { override fun category() = "Adventure"; override fun icon() = Icons.Default.Terrain }
+class Restaurant(id: Int, name: String, location: String, baseCost: Double, rating: Double, imageResId: Int, description: String, lat: Double, lng: Double, weather: String, val cuisine: String, activities: List<Activity>) : Destination(id, name, location, baseCost, rating, imageResId, description, lat, lng, weather, activities) { override fun category() = "Food"; override fun icon() = Icons.Default.Restaurant }
 
-class HistoricalSite(id: Int, name: String, location: String, baseCost: Double, rating: Double, imageResId: Int, description: String, lat: Double, lng: Double, weather: String, val entryFee: Double) : Destination(id, name, location, baseCost, rating, imageResId, description, lat, lng, weather) {
-    override val baseCost: Double get() = super.baseCost + entryFee
-    override fun category() = "Historical"
-    override fun icon() = Icons.Default.AccountBalance
-}
-
-class AdventureSpot(id: Int, name: String, location: String, baseCost: Double, rating: Double, imageResId: Int, description: String, lat: Double, lng: Double, weather: String, val difficulty: String) : Destination(id, name, location, baseCost, rating, imageResId, description, lat, lng, weather) {
-    override fun category() = "Adventure"
-    override fun icon() = Icons.Default.Terrain
-}
-
-class Restaurant(id: Int, name: String, location: String, baseCost: Double, rating: Double, imageResId: Int, description: String, lat: Double, lng: Double, weather: String, val cuisine: String) : Destination(id, name, location, baseCost, rating, imageResId, description, lat, lng, weather) {
-    override fun category() = "Food"
-    override fun icon() = Icons.Default.Restaurant
-}
-
-data class Vehicle(
-    val id: Int,
-    val name: String,
-    val type: String,
-    val baseFare: Double,
-    val icon: ImageVector,
-    val driverName: String,
-    val driverPhone: String,
-    val plateNumber: String
-)
-
-enum class TicketStatus { ACTIVE, CANCELLED }
-
-data class TripTicket(
-    val ticketId: String,
-    val bookingDate: Date,
-    val destinations: List<Destination>,
-    val vehicle: Vehicle?,
-    val travelers: Int,
-    val totalPaid: Double,
-    val paymentMethod: String,
-    val startTime: String?,
-    var status: TicketStatus = TicketStatus.ACTIVE
-)
-
-class BookingSystem(val ownerName: String, val ownerEmail: String) {
-    val cartDestinations = mutableStateListOf<Destination>()
+class PlannerSystem(val ownerName: String, val ownerEmail: String) {
+    val scheduledVisits = mutableStateListOf<ScheduledVisit>()
     val favoriteDestinations = mutableStateListOf<Destination>()
-    val confirmedTickets = mutableStateListOf<TripTicket>()
 
-    var selectedVehicle by mutableStateOf<Vehicle?>(null)
-    var travelers by mutableIntStateOf(1)
-    var startDate by mutableStateOf<Date?>(null)
-    var endDate by mutableStateOf<Date?>(null)
-    var startTime by mutableStateOf<String?>(null)
+    fun addVisit(dest: Destination, date: Date, time: String) {
+        if (scheduledVisits.none { it.destination.id == dest.id }) {
+            scheduledVisits.add(ScheduledVisit(dest, date, time))
+        }
+    }
 
-    fun toggleCart(dest: Destination) {
-        if (cartDestinations.any { it.id == dest.id }) cartDestinations.removeAll { it.id == dest.id }
-        else cartDestinations.add(dest)
+    fun removeVisit(dest: Destination) {
+        scheduledVisits.removeAll { it.destination.id == dest.id }
     }
 
     fun toggleFavorite(dest: Destination) {
         if (favoriteDestinations.any { it.id == dest.id }) favoriteDestinations.removeAll { it.id == dest.id }
         else favoriteDestinations.add(dest)
     }
-
-    fun calculateSubtotal(): Double = cartDestinations.sumOf { it.costForTravelers(travelers) }
-    fun calculateTransport(): Double = selectedVehicle?.baseFare ?: 0.0
-    fun calculateTotal(): Double = calculateSubtotal() + calculateTransport()
-
-    fun confirmBooking(paymentMethod: String) {
-        val ticket = TripTicket(
-            ticketId = UUID.randomUUID().toString().take(8).uppercase(),
-            bookingDate = Date(),
-            destinations = cartDestinations.toList(),
-            vehicle = selectedVehicle,
-            travelers = travelers,
-            totalPaid = calculateTotal(),
-            paymentMethod = paymentMethod,
-            startTime = startTime
-        )
-        confirmedTickets.add(ticket)
-        cartDestinations.clear()
-        selectedVehicle = null
-        travelers = 1
-        startTime = null
-    }
-
-    fun cancelTicket(ticket: TripTicket) {
-        val index = confirmedTickets.indexOfFirst { it.ticketId == ticket.ticketId }
-        if (index != -1) {
-            confirmedTickets[index] = confirmedTickets[index].copy(status = TicketStatus.CANCELLED)
-        }
-    }
 }
 
 // =====================================================
-// 3. AUTH & SERVICE LAYER
+// 2. AUTH & REPOSITORY
 // =====================================================
-
 class AuthManager(context: Context) {
     private val prefs = context.getSharedPreferences("NasugBrowsePrefs", Context.MODE_PRIVATE)
     fun isLoggedIn(): Boolean = prefs.getBoolean("isLoggedIn", false)
@@ -198,46 +116,40 @@ class AuthManager(context: Context) {
 
 object TravelRepository {
     val allDestinations: List<Destination> = listOf(
-        Beach(2, "Pico de Loro Beach", "Nasugbu, Batangas", 1500.0, 4.7, R.drawable.pico_de_loro, "A high-end beach club famous for its iconic 'parrot beak' rock formation.", 14.192139, 120.602222, "Partly Cloudy, 32°C", true),
-        Beach(5, "Munting Buhangin Beach", "Nasugbu, Batangas", 1500.0, 4.4, R.drawable.munting_buhangin, "A laid-back, family-friendly resort known for its fine grey sand.", 14.113222, 120.622444, "Sunny, 30°C", true),
-        Beach(8, "Kayraang Cove", "Brgy. Calayo, Nasugbu", 1200.0, 4.8, R.drawable.kayraang_cove, "A private, protected cove with raw and rugged beauty.", 14.162639, 120.596861, "Sunny, 31°C", false),
-        Beach(10, "Santelmo Cove", "Hamilo Coast, Nasugbu", 3000.0, 4.9, R.drawable.santelmo_cove, "A semi-secluded, pristine cove within the Hamilo Coast.", 14.205556, 120.594444, "Partly Cloudy, 30°C", false),
-        Beach(11, "Tali Beach", "Brgy. Balaytigue, Nasugbu", 1800.0, 4.6, R.drawable.tali_beach, "A private beach subdivision known for its cliff jump site.", 14.123982, 120.612279, "Breezy, 29°C", true),
-        Beach(16, "Natipuan White Sand", "Brgy. Natipuan, Nasugbu", 1800.0, 4.6, R.drawable.natipuan, "A sheltered, crescent-shaped coastal stretch known for fine cream-to-white sand, calm swimming waters, and budget-friendly beachfront resorts.", 14.1174000, 120.6188000, "Sunny, 35°C", true),
-        Beach(17, "Pamana Resorts and Hotel", "Brgy. Calayo, Nasugbu", 250.0, 4.7, R.drawable.pamana, "Pairs a laid-back public shoreline—famous for zero entrance/corkage fees—with a pet-friendly beachfront stay offering ₱250 day tours, an infinity pool.", 14.152063, 120.609312, "Sunny, 35°C", true),
-        Beach(12, "Canyon Cove by Lawton", "Brgy. Wawa, Nasugbu", 2500.0, 4.8, R.drawable.canyon_cove, "A sheltered crescent cove in Piloto Wawa, Nasugbu, framed by calm turquoise waters, a wide cream-sand beach, and lush green coastal hills.", 14.0933, 120.6197, "Sunny, 32°C", true),
-        Beach(18, "Matabungkay Beach Hotel", "Brgy. Matabungkay, Nasugbu", 2500.0, 4.8, R.drawable.matabungkay, "A popular, family-friendly spot best known for its shallow, calm waters, wide cream-sand shoreline, and iconic floating bamboo cottages (balsa).", 13.9475, 120.6169, "Sunny, 32°C", true),
-        HistoricalSite(6, "Cape Santiago Lighthouse", "Nasugbu, Batangas", 300.0, 4.6, R.drawable.cape_santiago, "One of the oldest and tallest lighthouses in the Philippines.", 13.77139, 120.65250, "Breezy, 30°C", 50.0),
-        HistoricalSite(9, "Caleruega Church", "Brgy. Kaylaway, Nasugbu", 250.0, 4.7, R.drawable.caleruega, "A stunning Romanesque-style chapel perched on a hill.", 14.072583, 120.835806, "Cool, 25°C", 50.0),
-        HistoricalSite(14, "Nasugbu Municipal Hall & Plaza", "Poblacion, Nasugbu", 0.0, 4.0, R.drawable.nasugbu_municipal, "The town center, which features a historic municipal hall.", 14.07429, 120.63249, "Humid, 31°C", 0.0),
-        AdventureSpot(13, "Pico de Loro (Monte Palay-Palay)", "Nasugbu, Batangas", 700.0, 4.7, R.drawable.pico_de_loro_hike, "A popular hiking destination for its distinctive 'parrot's beak' peak.", 14.2167, 120.6500, "Windy, 23°C", "Hard (6/9)"),
-        AdventureSpot(3, "Mt. Batulao", "Nasugbu, Batangas", 800.0, 4.8, R.drawable.mt_batulao, "A popular hiking destination offering breathtaking 360-degree views.", 14.04500, 120.80444, "Cool, 24°C", "Moderate (4/9)"),
-        AdventureSpot(4, "Mt. Talamitam", "Nasugbu, Batangas", 600.0, 4.5, R.drawable.mt_talamitam, "A beginner-friendly mountain known for its scenic grasslands.", 14.10778, 120.75972, "Clear, 26°C", "Easy (3/9)"),
-        Restaurant(15, "Daddy Riz", "Nasugbu, Batangas", 350.0, 4.4, R.drawable.daddy_riz, "A must-visit for foodies serving the famous Batangas Lomi.", 14.0750, 120.6300, "Warm, 28°C", "Batangas Cuisine"),
-        Restaurant(7, "Kainan sa Dalampasigan", "Nasugbu, Batangas", 800.0, 4.5, R.drawable.kainan_sa_dalampasigan, "A famous local dining spot serving authentic Batangas dishes.", 14.072139, 120.625194, "Humid, 31°C", "Batangas Cuisine"),
+        Beach(2, "Pico de Loro Beach", "Nasugbu, Batangas", 1500.0, 4.7, R.drawable.pico_de_loro, "A high-end beach club famous for its iconic 'parrot beak' rock formation.", 14.192139, 120.602222, "Partly Cloudy, 32°C", true, listOf(Activity("Island Hopping", 500.0), Activity("Snorkeling Gear Rental", 300.0))),
+        Beach(5, "Munting Buhangin Beach", "Nasugbu, Batangas", 1500.0, 4.4, R.drawable.munting_buhangin, "A laid-back, family-friendly resort known for its fine grey sand.", 14.113222, 120.622444, "Sunny, 30°C", true, listOf(Activity("Cottage Rental", 1000.0), Activity("Banana Boat Ride", 350.0))),
+        Beach(8, "Kayraang Cove", "Brgy. Calayo, Nasugbu", 1200.0, 4.8, R.drawable.kayraang_cove, "A private, protected cove with raw and rugged beauty.", 14.162639, 120.596861, "Sunny, 31°C", false, listOf(Activity("Camping Fee", 200.0), Activity("Tent Rental", 500.0))),
+        Beach(10, "Santelmo Cove", "Hamilo Coast, Nasugbu", 3000.0, 4.9, R.drawable.santelmo_cove, "A semi-secluded, pristine cove within the Hamilo Coast.", 14.205556, 120.594444, "Partly Cloudy, 30°C", false, listOf(Activity("Boat Transfer", 1500.0), Activity("Guided Snorkeling", 800.0))),
+        Beach(11, "Tali Beach", "Brgy. Balaytigue, Nasugbu", 1800.0, 4.6, R.drawable.tali_beach, "A private beach subdivision known for its cliff jump site.", 14.123982, 120.612279, "Breezy, 29°C", true, listOf(Activity("Cliff Jumping Guide", 250.0), Activity("Volleyball Rental", 150.0))),
+        Beach(16, "Natipuan White Sand", "Brgy. Natipuan, Nasugbu", 1800.0, 4.6, R.drawable.natipuan, "A sheltered, crescent-shaped coastal stretch known for fine cream-to-white sand.", 14.1174000, 120.6188000, "Sunny, 35°C", true, listOf(Activity("Beach Entrance", 50.0), Activity("Table Rental", 300.0))),
+        Beach(17, "Pamana Resorts and Hotel", "Brgy. Calayo, Nasugbu", 250.0, 4.7, R.drawable.pamana, "Pairs a laid-back public shoreline with a pet-friendly beachfront stay.", 14.152063, 120.609312, "Sunny, 35°C", true, listOf(Activity("Day Tour (Pool Access)", 250.0), Activity("Pet Fee", 100.0))),
+        Beach(12, "Canyon Cove by Lawton", "Brgy. Wawa, Nasugbu", 2500.0, 4.8, R.drawable.canyon_cove, "A sheltered crescent cove framed by calm turquoise waters and coastal hills.", 14.0933, 120.6197, "Sunny, 32°C", true, listOf(Activity("Water Park Access", 500.0), Activity("Paddle Boarding", 600.0))),
+        Beach(18, "Matabungkay Beach Hotel", "Brgy. Matabungkay, Nasugbu", 2500.0, 4.8, R.drawable.matabungkay, "A popular, family-friendly spot best known for its shallow, calm waters.", 13.9475, 120.6169, "Sunny, 32°C", true, listOf(Activity("Balsa (Floating Cottage)", 1500.0), Activity("Banana Boat", 400.0))),
+        HistoricalSite(6, "Cape Santiago Lighthouse", "Nasugbu, Batangas", 300.0, 4.6, R.drawable.cape_santiago, "One of the oldest and tallest lighthouses in the Philippines.", 13.77139, 120.65250, "Breezy, 30°C", 50.0, listOf(Activity("Entrance Fee", 50.0), Activity("Souvenir Buying", 200.0))),
+        HistoricalSite(9, "Caleruega Church", "Brgy. Kaylaway, Nasugbu", 250.0, 4.7, R.drawable.caleruega, "A stunning Romanesque-style chapel perched on a hill.", 14.072583, 120.835806, "Cool, 25°C", 50.0, listOf(Activity("Entrance Fee", 50.0), Activity("Shuttle to Hanging Bridge", 100.0))),
+        HistoricalSite(14, "Nasugbu Municipal Hall & Plaza", "Poblacion, Nasugbu", 0.0, 4.0, R.drawable.nasugbu_municipal, "The town center, which features a historic municipal hall.", 14.07429, 120.63249, "Humid, 31°C", 0.0, listOf(Activity("Free Walking Tour", 0.0))),
+        AdventureSpot(13, "Pico de Loro (Monte Palay-Palay)", "Nasugbu, Batangas", 700.0, 4.7, R.drawable.pico_de_loro_hike, "A popular hiking destination for its distinctive 'parrot's beak' peak.", 14.2167, 120.6500, "Windy, 23°C", "Hard (6/9)", listOf(Activity("Registration Fee", 50.0), Activity("Guide Fee (Group)", 600.0))),
+        AdventureSpot(3, "Mt. Batulao", "Nasugbu, Batangas", 800.0, 4.8, R.drawable.mt_batulao, "A popular hiking destination offering breathtaking 360-degree views.", 14.04500, 120.80444, "Cool, 24°C", "Moderate (4/9)", listOf(Activity("Registration", 100.0), Activity("Guide Fee", 500.0), Activity("Camping Overnight", 300.0))),
+        AdventureSpot(4, "Mt. Talamitam", "Nasugbu, Batangas", 600.0, 4.5, R.drawable.mt_talamitam, "A beginner-friendly mountain known for its scenic grasslands.", 14.10778, 120.75972, "Clear, 26°C", "Easy (3/9)", listOf(Activity("Registration", 50.0), Activity("Guide Fee", 400.0))),
+        Restaurant(15, "Daddy Riz", "Nasugbu, Batangas", 350.0, 4.4, R.drawable.daddy_riz, "A must-visit for foodies serving the famous Batangas Lomi.", 14.0750, 120.6300, "Warm, 28°C", "Batangas Cuisine", listOf(Activity("Special Lomi Bowl", 150.0), Activity("Sizzling Bulalo", 350.0))),
+        Restaurant(7, "Kainan sa Dalampasigan", "Nasugbu, Batangas", 800.0, 4.5, R.drawable.kainan_sa_dalampasigan, "A famous local dining spot serving authentic Batangas dishes.", 14.072139, 120.625194, "Humid, 31°C", "Batangas Cuisine", listOf(Activity("Inihaw na Liempo", 250.0), Activity("Sinigang na Hipon", 400.0)))
     )
-
     val categories = listOf("All", "Beach", "Historical", "Adventure", "Food")
-
-    val availableVehicles = listOf(
-        Vehicle(1, "Tour Bus", "Large capacity, air-conditioned", 6000.0, Icons.Default.DirectionsBus, "Kuya Jobert", "09171234567", "BUS-123"),
-        Vehicle(2, "Private Van", "Air-conditioned, good for groups", 4500.0, Icons.Default.AirportShuttle, "Mang Tomas", "09187654321", "VAN-456"),
-        Vehicle(3, "Private Car", "Sedan or SUV, up to 4 people", 2500.0, Icons.Default.DirectionsCar, "Sir Mark", "09199998888", "CAR-789"),
-        Vehicle(4, "Local Jeepney", "Batangas Route, budget friendly", 600.0, Icons.Default.DirectionsBus, "Manong Pedro", "09201112222", "JEEP-000")
-    )
+    val destinationReviews = mutableStateMapOf<Int, MutableList<Review>>()
 }
 
 // =====================================================
-// 4. MAIN ACTIVITY & SPLASH
+// 3. MAIN ACTIVITY
 // =====================================================
-
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            MaterialTheme(colorScheme = LightColors) {
-                val context = LocalContext.current
-                val authManager = remember { AuthManager(context) }
+            val context = LocalContext.current
+            val authManager = remember { AuthManager(context) }
+            var isDarkMode by remember { mutableStateOf(false) }
+
+            MaterialTheme(colorScheme = if (isDarkMode) DarkColors else LightColors) {
                 var showSplash by remember { mutableStateOf(true) }
                 var isLoggedIn by remember { mutableStateOf(authManager.isLoggedIn()) }
 
@@ -247,8 +159,8 @@ class MainActivity : ComponentActivity() {
                     SplashScreen()
                 } else {
                     if (isLoggedIn) {
-                        val booking = remember { BookingSystem(authManager.getUserName(), authManager.getUserEmail()) }
-                        MainApp(booking, onLogout = { authManager.logout(); isLoggedIn = false })
+                        val planner = remember { PlannerSystem(authManager.getUserName(), authManager.getUserEmail()) }
+                        MainApp(planner, isDarkMode, onToggleTheme = { isDarkMode = !isDarkMode }, onLogout = { authManager.logout(); isLoggedIn = false })
                     } else {
                         AuthScreen(authManager) { isLoggedIn = true }
                     }
@@ -263,17 +175,13 @@ fun SplashScreen() {
     Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(PrimaryBlue, Color(0xFF0F172A)))), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(Icons.Default.FlightTakeoff, contentDescription = null, modifier = Modifier.size(100.dp), tint = Color.White)
-            Spacer(Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(16.dp))
             Text("NasugBrowse", fontSize = 32.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
-            Spacer(Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(24.dp))
             CircularProgressIndicator(color = AccentOrange)
         }
     }
 }
-
-// =====================================================
-// 5. AUTH SCREEN
-// =====================================================
 
 @Composable
 fun AuthScreen(authManager: AuthManager, onLoginSuccess: () -> Unit) {
@@ -282,13 +190,16 @@ fun AuthScreen(authManager: AuthManager, onLoginSuccess: () -> Unit) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
+    var errorMsg by remember { mutableStateOf("") }
 
-    Column(modifier = Modifier.fillMaxSize().background(BgLight).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        Icon(Icons.Default.TravelExplore, contentDescription = null, modifier = Modifier.size(80.dp), tint = PrimaryBlue)
-        Spacer(Modifier.height(16.dp))
-        Text(if (isLoginMode) "Welcome Back" else "Create Account", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = TextDark)
-        Text("Browse the best of Nasugbu, Batangas", color = TextGray)
-        Spacer(Modifier.height(32.dp))
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+        Icon(Icons.Default.TravelExplore, contentDescription = null, modifier = Modifier.size(80.dp), tint = MaterialTheme.colorScheme.primary)
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(if (isLoginMode) "Welcome Back" else "Create Account", fontSize = 28.sp, fontWeight = FontWeight.Bold)
+        Text("Browse the best of Nasugbu, Batangas", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(modifier = Modifier.height(32.dp))
+
+        if (errorMsg.isNotEmpty()) Text(errorMsg, color = Color.Red, fontSize = 14.sp, modifier = Modifier.padding(bottom = 8.dp))
 
         if (!isLoginMode) {
             OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Full Name") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)); Spacer(Modifier.height(12.dp))
@@ -302,92 +213,98 @@ fun AuthScreen(authManager: AuthManager, onLoginSuccess: () -> Unit) {
         Spacer(modifier = Modifier.height(24.dp))
 
         Button(
-            onClick = { authManager.registerAndLogin(if (isLoginMode) email.substringBefore("@") else name, email); onLoginSuccess() },
-            modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
+            onClick = {
+                if (email.isBlank() || password.isBlank() || (!isLoginMode && name.isBlank())) errorMsg = "Please fill in all fields."
+                else { authManager.registerAndLogin(if (isLoginMode) email.substringBefore("@") else name, email); onLoginSuccess() }
+            },
+            modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(12.dp)
         ) { Text(if (isLoginMode) "Log In" else "Sign Up", fontSize = 16.sp, fontWeight = FontWeight.Bold) }
 
         Spacer(modifier = Modifier.height(16.dp))
-        TextButton(onClick = { isLoginMode = !isLoginMode }) { Text(if (isLoginMode) "Don't have an account? Sign Up" else "Already have an account? Log In", color = PrimaryBlue) }
+        TextButton(onClick = { isLoginMode = !isLoginMode; errorMsg = "" }) { Text(if (isLoginMode) "Don't have an account? Sign Up" else "Already have an account? Log In") }
     }
 }
 
 // =====================================================
-// 6. MAIN APP NAVIGATION
+// 4. MAIN APP NAVIGATION
 // =====================================================
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainApp(booking: BookingSystem, onLogout: () -> Unit) {
+fun MainApp(planner: PlannerSystem, isDarkMode: Boolean, onToggleTheme: () -> Unit, onLogout: () -> Unit) {
     var selectedTab by remember { mutableIntStateOf(0) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-
     var selectedDestinationDetail by remember { mutableStateOf<Destination?>(null) }
-    var showCheckoutSheet by remember { mutableStateOf(false) }
-    var selectedTicketDetail by remember { mutableStateOf<TripTicket?>(null) }
+    var showTerms by remember { mutableStateOf(false) }
 
-    Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        bottomBar = {
-            NavigationBar(containerColor = Color.White, tonalElevation = 8.dp) {
-                NavigationBarItem(selected = selectedTab == 0, onClick = { selectedTab = 0 }, icon = { Icon(Icons.Default.Explore, contentDescription = null) }, label = { Text("Explore") }, colors = NavigationBarItemDefaults.colors(selectedIconColor = PrimaryBlue, selectedTextColor = PrimaryBlue))
-                NavigationBarItem(selected = selectedTab == 1, onClick = { selectedTab = 1 }, icon = { Icon(Icons.Default.Favorite, contentDescription = null) }, label = { Text("Saved") }, colors = NavigationBarItemDefaults.colors(selectedIconColor = PrimaryBlue, selectedTextColor = PrimaryBlue))
-                NavigationBarItem(
-                    selected = selectedTab == 2, onClick = { selectedTab = 2 },
-                    icon = { BadgedBox(badge = { if (booking.cartDestinations.isNotEmpty()) Badge { Text(booking.cartDestinations.size.toString()) } }) { Icon(Icons.Default.ShoppingCart, contentDescription = null) } },
-                    label = { Text("Cart") }, colors = NavigationBarItemDefaults.colors(selectedIconColor = PrimaryBlue, selectedTextColor = PrimaryBlue)
-                )
-                NavigationBarItem(
-                    selected = selectedTab == 3, onClick = { selectedTab = 3 },
-                    icon = { BadgedBox(badge = { if (booking.confirmedTickets.isNotEmpty()) Badge { Text(booking.confirmedTickets.size.toString()) } }) { Icon(Icons.Default.ConfirmationNumber, contentDescription = null) } },
-                    label = { Text("Tickets") }, colors = NavigationBarItemDefaults.colors(selectedIconColor = PrimaryBlue, selectedTextColor = PrimaryBlue)
-                )
-                NavigationBarItem(selected = selectedTab == 4, onClick = { selectedTab = 4 }, icon = { Icon(Icons.Default.Person, contentDescription = null) }, label = { Text("Profile") }, colors = NavigationBarItemDefaults.colors(selectedIconColor = PrimaryBlue, selectedTextColor = PrimaryBlue))
+    // FIXED WALLPAPER LOGIC: Based on Dark Mode
+    val bgResId = if (isDarkMode) R.drawable.bg_night else R.drawable.bg_morning
+    val overlayColor = if (isDarkMode) Color.Black.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.2f)
+
+    if (showTerms) TermsAndPolicyDialog(onDismiss = { showTerms = false })
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Image(painter = painterResource(id = bgResId), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        Box(modifier = Modifier.fillMaxSize().background(overlayColor))
+
+        Scaffold(
+            containerColor = Color.Transparent,
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+            bottomBar = {
+                NavigationBar(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f), tonalElevation = 8.dp) {
+                    NavigationBarItem(selected = selectedTab == 0, onClick = { selectedTab = 0 }, icon = { Icon(Icons.Default.Explore, contentDescription = null) }, label = { Text("Explore", fontSize = 10.sp) })
+                    NavigationBarItem(selected = selectedTab == 1, onClick = { selectedTab = 1 }, icon = { Icon(Icons.Default.Favorite, contentDescription = null) }, label = { Text("Saved", fontSize = 10.sp) })
+                    NavigationBarItem(
+                        selected = selectedTab == 2, onClick = { selectedTab = 2 },
+                        icon = { BadgedBox(badge = { if (planner.scheduledVisits.isNotEmpty()) Badge { Text(planner.scheduledVisits.size.toString()) } }) { Icon(Icons.Default.Map, contentDescription = null) } },
+                        label = { Text("Itinerary", fontSize = 10.sp) }
+                    )
+                    NavigationBarItem(selected = selectedTab == 3, onClick = { selectedTab = 3 }, icon = { Icon(Icons.Default.PriceCheck, contentDescription = null) }, label = { Text("Prices", fontSize = 10.sp) })
+                    NavigationBarItem(selected = selectedTab == 4, onClick = { selectedTab = 4 }, icon = { Icon(Icons.Default.Person, contentDescription = null) }, label = { Text("Profile", fontSize = 10.sp) })
+                }
             }
-        }
-    ) { padding ->
-        Box(modifier = Modifier.padding(padding).background(BgLight)) {
-            when (selectedTab) {
-                0 -> ExploreScreen(booking, onDetails = { selectedDestinationDetail = it }, snackbar = { scope.launch { snackbarHostState.showSnackbar(it) } })
-                1 -> FavoritesScreen(booking, onDetails = { selectedDestinationDetail = it })
-                2 -> CartScreen(booking, onCheckout = { showCheckoutSheet = true }, snackbar = { scope.launch { snackbarHostState.showSnackbar(it) } })
-                3 -> TicketsScreen(booking, onViewTicket = { selectedTicketDetail = it })
-                4 -> ProfileScreen(booking, onLogout)
+        ) { padding ->
+            Box(modifier = Modifier.padding(padding).fillMaxSize()) {
+                when (selectedTab) {
+                    0 -> ExploreScreen(planner, onDetails = { selectedDestinationDetail = it }, snackbar = { scope.launch { snackbarHostState.showSnackbar(it) } })
+                    1 -> FavoritesScreen(planner, onDetails = { selectedDestinationDetail = it })
+                    2 -> ItineraryScreen(planner, onDetails = { selectedDestinationDetail = it })
+                    3 -> PricesScreen()
+                    4 -> ProfileScreen(planner, isDarkMode, onToggleTheme, onLogout, onShowTerms = { showTerms = true })
+                }
             }
         }
 
         if (selectedDestinationDetail != null) {
-            DestinationDetailSheet(selectedDestinationDetail!!, onDismiss = { selectedDestinationDetail = null })
-        }
-
-        if (showCheckoutSheet) {
-            CheckoutSheet(booking, onDismiss = { showCheckoutSheet = false }, onSuccess = { paymentMethod ->
-                showCheckoutSheet = false
-                booking.confirmBooking(paymentMethod)
-                scope.launch { snackbarHostState.showSnackbar("Booking Confirmed! Ticket Generated.") }
-                selectedTab = 3
-            })
-        }
-
-        if (selectedTicketDetail != null) {
-            TicketDetailSheet(
-                ticket = selectedTicketDetail!!,
-                onDismiss = { selectedTicketDetail = null },
-                onCancel = { booking.cancelTicket(selectedTicketDetail!!); selectedTicketDetail = null }
-            )
+            DestinationDetailSheet(selectedDestinationDetail!!, planner, onDismiss = { selectedDestinationDetail = null })
         }
     }
 }
 
 // =====================================================
-// 7. SCREENS
+// 5. SCREENS
 // =====================================================
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ExploreScreen(booking: BookingSystem, onDetails: (Destination) -> Unit, snackbar: (String) -> Unit) {
+fun ExploreScreen(planner: PlannerSystem, onDetails: (Destination) -> Unit, snackbar: (String) -> Unit) {
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("All") }
+
+    // State for the Date/Time Picker when adding a destination
+    var destinationToSchedule by remember { mutableStateOf<Destination?>(null) }
+
+    if (destinationToSchedule != null) {
+        ScheduleDestinationDialog(
+            destination = destinationToSchedule!!,
+            onDismiss = { destinationToSchedule = null },
+            onScheduled = { date, time ->
+                planner.addVisit(destinationToSchedule!!, date, time)
+                snackbar("Added ${destinationToSchedule!!.name} to Itinerary")
+                destinationToSchedule = null
+            }
+        )
+    }
 
     val filtered = TravelRepository.allDestinations.filter { dest ->
         val matchesCategory = selectedCategory == "All" || dest.category() == selectedCategory
@@ -396,14 +313,14 @@ fun ExploreScreen(booking: BookingSystem, onDetails: (Destination) -> Unit, snac
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        Text("Hi, ${booking.ownerName.split(" ").first()} 👋", fontSize = 16.sp, color = TextGray, modifier = Modifier.padding(top = 16.dp))
-        Text("Browse Destinations", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, color = TextDark, modifier = Modifier.padding(bottom = 16.dp))
+        Text("Hi, ${planner.ownerName.split(" ").first()} 👋", fontSize = 16.sp, color = Color.White, modifier = Modifier.padding(top = 16.dp))
+        Text("Browse Destinations", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, color = Color.White, modifier = Modifier.padding(bottom = 16.dp))
 
         OutlinedTextField(
             value = searchQuery, onValueChange = { searchQuery = it }, modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Search destinations...") }, leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = TextGray) },
+            placeholder = { Text("Search destinations...") }, leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
             shape = RoundedCornerShape(16.dp),
-            colors = TextFieldDefaults.colors(focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent, focusedContainerColor = Color.White, unfocusedContainerColor = Color.White)
+            colors = TextFieldDefaults.colors(focusedContainerColor = MaterialTheme.colorScheme.surface, unfocusedContainerColor = MaterialTheme.colorScheme.surface)
         )
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -411,7 +328,7 @@ fun ExploreScreen(booking: BookingSystem, onDetails: (Destination) -> Unit, snac
             items(TravelRepository.categories) { category ->
                 FilterChip(
                     selected = selectedCategory == category, onClick = { selectedCategory = category }, label = { Text(category) },
-                    colors = FilterChipDefaults.filterChipColors(selectedContainerColor = PrimaryBlue, selectedLabelColor = Color.White)
+                    colors = FilterChipDefaults.filterChipColors(selectedContainerColor = MaterialTheme.colorScheme.primary, selectedLabelColor = Color.White, labelColor = Color.White)
                 )
             }
         }
@@ -419,11 +336,11 @@ fun ExploreScreen(booking: BookingSystem, onDetails: (Destination) -> Unit, snac
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
             items(filtered, key = { it.id }) { dest ->
-                val isAdded = booking.cartDestinations.any { it.id == dest.id }
-                val isFav = booking.favoriteDestinations.any { it.id == dest.id }
-                ProfessionalDestinationCard(dest, isAdded, isFav, onClick = { onDetails(dest) }, onFavToggle = { booking.toggleFavorite(dest) }) {
-                    booking.toggleCart(dest)
-                    if (!isAdded) snackbar("Added to Cart") else snackbar("Removed from Cart")
+                val isAdded = planner.scheduledVisits.any { it.destination.id == dest.id }
+                val isFav = planner.favoriteDestinations.any { it.id == dest.id }
+                DestinationCard(dest, isAdded, isFav, onClick = { onDetails(dest) }, onFavToggle = { planner.toggleFavorite(dest) }) {
+                    if (!isAdded) destinationToSchedule = dest // Open Schedule Dialog
+                    else { planner.removeVisit(dest); snackbar("Removed from Itinerary") }
                 }
             }
         }
@@ -431,20 +348,16 @@ fun ExploreScreen(booking: BookingSystem, onDetails: (Destination) -> Unit, snac
 }
 
 @Composable
-fun ProfessionalDestinationCard(dest: Destination, isAdded: Boolean, isFav: Boolean, onClick: () -> Unit, onFavToggle: () -> Unit, onAddToggle: () -> Unit) {
+fun DestinationCard(dest: Destination, isAdded: Boolean, isFav: Boolean, onClick: () -> Unit, onFavToggle: () -> Unit, onAddToggle: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth().height(220.dp).clickable { onClick() }, shape = RoundedCornerShape(20.dp)) {
         Box(modifier = Modifier.fillMaxSize()) {
-            Image(
-                painter = painterResource(id = dest.imageResId),
-                contentDescription = dest.name,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-
+            Image(painter = painterResource(id = dest.imageResId), contentDescription = dest.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f)), startY = 300f)))
+
             IconButton(onClick = onFavToggle, modifier = Modifier.align(Alignment.TopEnd).padding(12.dp).background(Color.White.copy(alpha = 0.3f), CircleShape)) {
                 Icon(if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder, contentDescription = null, tint = if (isFav) Color.Red else Color.White)
             }
+
             Column(modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)) {
                 Text(dest.name, fontWeight = FontWeight.Bold, fontSize = 22.sp, color = Color.White)
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -454,7 +367,7 @@ fun ProfessionalDestinationCard(dest: Destination, isAdded: Boolean, isFav: Bool
                 Spacer(Modifier.height(8.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Text("₱${"%.0f".format(dest.baseCost)}", fontWeight = FontWeight.ExtraBold, color = AccentOrange, fontSize = 20.sp)
-                    FilledIconButton(onClick = onAddToggle, colors = IconButtonDefaults.filledIconButtonColors(containerColor = PrimaryBlue)) {
+                    FilledIconButton(onClick = onAddToggle, colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.primary)) {
                         Icon(if (isAdded) Icons.Default.Check else Icons.Default.Add, contentDescription = null)
                     }
                 }
@@ -463,251 +376,172 @@ fun ProfessionalDestinationCard(dest: Destination, isAdded: Boolean, isFav: Bool
     }
 }
 
+// =====================================================
+// 6. ITINERARY SCREEN
+// =====================================================
+@Composable
+fun ItineraryScreen(planner: PlannerSystem, onDetails: (Destination) -> Unit) {
+    val dateFormatter = DateFormat.getMediumDateFormat(LocalContext.current)
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Text("My Itinerary", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = Color.White, modifier = Modifier.padding(16.dp))
+
+        LazyColumn(modifier = Modifier.weight(1f).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            item { Text("Scheduled Places to Visit", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Color.White) }
+
+            if (planner.scheduledVisits.isEmpty()) {
+                item { Text("Your itinerary is empty. Go to Explore to add places.", color = Color.White.copy(alpha=0.8f)) }
+            } else {
+                items(planner.scheduledVisits, key = { it.destination.id }) { visit ->
+                    Card(
+                        modifier = Modifier.clickable { onDetails(visit.destination) },
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f))
+                    ) {
+                        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(visit.destination.icon(), contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(visit.destination.name, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                Text("${dateFormatter.format(visit.date)} at ${visit.time}", fontSize = 12.sp, color = TextGray)
+                            }
+                            IconButton(onClick = { planner.removeVisit(visit.destination) }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Remove", tint = Color.Red)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// NEW: SCHEDULE DESTINATION DIALOG
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CartScreen(booking: BookingSystem, onCheckout: () -> Unit, snackbar: (String) -> Unit) {
-    val context = LocalContext.current
-    val dateFormatter = DateFormat.getMediumDateFormat(context)
+fun ScheduleDestinationDialog(destination: Destination, onDismiss: () -> Unit, onScheduled: (Date, String) -> Unit) {
     var showDatePicker by remember { mutableStateOf(false) }
-    val datePickerState = rememberDatePickerState()
-
     var showTimePicker by remember { mutableStateOf(false) }
+    var selectedDate by remember { mutableStateOf<Date?>(null) }
+    var selectedTime by remember { mutableStateOf<String?>(null) }
+    val datePickerState = rememberDatePickerState()
 
     if (showDatePicker) {
         DatePickerDialog(onDismissRequest = { showDatePicker = false }, confirmButton = {
             TextButton(onClick = {
-                datePickerState.selectedDateMillis?.let {
-                    val cal = Calendar.getInstance().apply { timeInMillis = it }
-                    booking.startDate = cal.time; cal.add(Calendar.DAY_OF_YEAR, 3); booking.endDate = cal.time
-                }
+                datePickerState.selectedDateMillis?.let { selectedDate = Date(it) }
                 showDatePicker = false
             }) { Text("Confirm") }
         }) { DatePicker(state = datePickerState) }
     }
 
     if (showTimePicker) {
-        val cal = Calendar.getInstance()
-        TimePickerDialog(
-            context,
-            { _, hourOfDay, minute ->
-                val amPm = if (hourOfDay < 12) "AM" else "PM"
-                val displayHour = if (hourOfDay % 12 == 0) 12 else hourOfDay % 12
-                booking.startTime = String.format("%02d:%02d %s", displayHour, minute, amPm)
-            },
-            cal.get(Calendar.HOUR_OF_DAY),
-            cal.get(Calendar.MINUTE),
-            false
-        ).show()
+        CustomTimePickerDialog(
+            onDismiss = { showTimePicker = false },
+            onTimeSelected = { time -> selectedTime = time; showTimePicker = false }
+        )
     }
 
-    val isVehicleSelected = booking.selectedVehicle != null
-    val isTimeSelected = booking.startTime != null
-    val isFormComplete = isVehicleSelected && isTimeSelected
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Card(shape = RoundedCornerShape(16.dp)) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Schedule Visit", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Text(destination.name, fontSize = 14.sp, color = TextGray)
+                Spacer(modifier = Modifier.height(16.dp))
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        Text("My Booking Cart", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = TextDark, modifier = Modifier.padding(16.dp))
+                OutlinedButton(onClick = { showDatePicker = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (selectedDate != null) DateFormat.getMediumDateFormat(LocalContext.current).format(selectedDate!!) else "Pick Date")
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(onClick = { showTimePicker = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text(selectedTime ?: "Pick Time")
+                }
 
-        LazyColumn(modifier = Modifier.weight(1f).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            item {
-                Card(colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(2.dp)) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = PrimaryBlue)
-                                Spacer(Modifier.width(8.dp))
-                                Column {
-                                    Text("Travel Dates", fontWeight = FontWeight.Bold, color = TextDark)
-                                    Text(if (booking.startDate != null) "${dateFormatter.format(booking.startDate)} - ${dateFormatter.format(booking.endDate)}" else "Select dates", fontSize = 12.sp, color = TextGray)
-                                }
-                            }
-                            TextButton(onClick = { showDatePicker = true }) { Text("Pick", color = PrimaryBlue) }
-                        }
-
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = BgLight)
-
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.AccessTime, contentDescription = null, tint = PrimaryBlue)
-                                Spacer(Modifier.width(8.dp))
-                                Column {
-                                    Text("Start Time", fontWeight = FontWeight.Bold, color = TextDark)
-                                    Text(booking.startTime ?: "Select time", fontSize = 12.sp, color = TextGray)
-                                }
-                            }
-                            TextButton(onClick = { showTimePicker = true }) { Text("Pick", color = PrimaryBlue) }
-                        }
-
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = BgLight)
-
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.People, contentDescription = null, tint = PrimaryBlue)
-                                Spacer(Modifier.width(8.dp))
-                                Text("Travelers", fontWeight = FontWeight.Bold, color = TextDark)
-                            }
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                IconButton(onClick = { if (booking.travelers > 1) booking.travelers-- }) { Icon(Icons.Default.RemoveCircleOutline, null, tint = TextGray) }
-                                Text("${booking.travelers}", fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.padding(horizontal = 8.dp))
-                                IconButton(onClick = { booking.travelers++ }) { Icon(Icons.Default.AddCircleOutline, null, tint = PrimaryBlue) }
-                            }
-                        }
-                    }
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                    Button(
+                        onClick = { if (selectedDate != null && selectedTime != null) onScheduled(selectedDate!!, selectedTime!!) },
+                        enabled = selectedDate != null && selectedTime != null,
+                        modifier = Modifier.padding(start = 8.dp)
+                    ) { Text("Add to Trip") }
                 }
             }
-            item { Text("Destinations", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = TextDark) }
-            if (booking.cartDestinations.isEmpty()) {
-                item { Text("Your cart is empty.", color = TextGray) }
-            } else {
-                items(booking.cartDestinations, key = { it.id }) { dest ->
-                    Card(colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(dest.icon(), contentDescription = null, tint = PrimaryBlue)
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(dest.name, fontWeight = FontWeight.Bold, color = TextDark)
-                                Text("₱${"%.0f".format(dest.baseCost)} x ${booking.travelers} pax", fontSize = 12.sp, color = TextGray)
-                            }
-                            Text("₱${"%.0f".format(dest.costForTravelers(booking.travelers))}", fontWeight = FontWeight.Bold, color = TextDark)
-                        }
-                    }
-                }
-            }
-
-            item {
-                Text("Transportation (Required)", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = TextDark)
-                if (!isFormComplete) {
-                    Text("⚠️ Please select travel dates, time, and transportation to proceed.", fontSize = 12.sp, color = Color.Red)
-                }
-            }
-            items(TravelRepository.availableVehicles) { vehicle ->
-                val isSelected = booking.selectedVehicle?.id == vehicle.id
-                Card(
-                    modifier = Modifier.clickable { booking.selectedVehicle = vehicle },
-                    colors = CardDefaults.cardColors(containerColor = if (isSelected) PrimaryBlue.copy(alpha = 0.1f) else Color.White),
-                    border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, PrimaryBlue) else null
-                ) {
-                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(vehicle.icon, contentDescription = null, tint = if (isSelected) PrimaryBlue else TextGray)
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(vehicle.name, fontWeight = FontWeight.Bold, color = TextDark)
-                            Text(vehicle.type, fontSize = 12.sp, color = TextGray)
-                        }
-                        Text("₱${"%.0f".format(vehicle.baseFare)}", fontWeight = FontWeight.Bold, color = TextDark)
-                    }
-                }
-            }
-            item { Spacer(Modifier.height(16.dp)) }
-        }
-
-        if (booking.cartDestinations.isNotEmpty()) {
-            Surface(shadowElevation = 16.dp, color = Color.White, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Column {
-                            Text("Total Estimate", color = TextGray, fontSize = 12.sp)
-                            Text("₱${"%.2f".format(booking.calculateTotal())}", fontWeight = FontWeight.ExtraBold, fontSize = 24.sp, color = PrimaryBlue)
-                        }
-                        Button(
-                            onClick = {
-                                if (isFormComplete) onCheckout()
-                                else snackbar("Please complete the form first.")
-                            },
-                            enabled = isFormComplete,
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.height(50.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = PrimaryBlue,
-                                disabledContainerColor = TextGray.copy(alpha = 0.3f)
-                            )
-                        ) {
-                            Text("Proceed to Pay", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun TicketsScreen(booking: BookingSystem, onViewTicket: (TripTicket) -> Unit) {
-    if (booking.confirmedTickets.isEmpty()) {
-        EmptyState("No tickets yet", "Your booked trips will appear here.")
-    } else {
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            item { Text("My E-Tickets", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = TextDark, modifier = Modifier.padding(bottom = 8.dp)) }
-            items(booking.confirmedTickets) { ticket ->
-                TicketCard(ticket) { onViewTicket(ticket) }
-            }
-        }
-    }
-}
-
-@Composable
-fun TicketCard(ticket: TripTicket, onClick: () -> Unit) {
-    val isCancelled = ticket.status == TicketStatus.CANCELLED
-    val bgColor = if (isCancelled) Color(0xFFFEE2E2) else Color.White
-    val textColor = if (isCancelled) Color(0xFF991B1B) else TextDark
-
-    Card(modifier = Modifier.fillMaxWidth().clickable { onClick() }, shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = bgColor), elevation = CardDefaults.cardElevation(4.dp)) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.ConfirmationNumber, contentDescription = null, tint = if (isCancelled) textColor else PrimaryBlue)
-                    Spacer(Modifier.width(8.dp))
-                    Text("NASUGBROWSE", fontWeight = FontWeight.ExtraBold, color = textColor, fontSize = 14.sp)
-                }
-                Text(if (isCancelled) "CANCELLED" else "CONFIRMED", fontWeight = FontWeight.Bold, color = if(isCancelled) textColor else Color(0xFF16A34A), fontSize = 12.sp)
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-            Text("${ticket.destinations.size} Destinations • ${ticket.travelers} Travelers", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = textColor)
-            Text("Total Paid: ₱${"%.2f".format(ticket.totalPaid)}", color = TextGray, fontSize = 14.sp)
-
-            Spacer(modifier = Modifier.height(16.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                repeat(30) { Box(modifier = Modifier.width(6.dp).height(2.dp).background(TextGray).padding(horizontal = 1.dp)) }
-            }
-
-            Spacer(Modifier.height(8.dp))
-            Text("Tap to view Receipt", fontSize = 12.sp, color = PrimaryBlue, textDecoration = TextDecoration.Underline)
         }
     }
 }
 
 // =====================================================
-// 8. BOTTOM SHEETS (MODALS)
+// 7. PRICE GUIDE & MODALS (With Dark Mode text fixes)
 // =====================================================
+@Composable
+fun PricesScreen() {
+    LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        item { Text("Price Guide & Activities", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = Color.White, modifier = Modifier.padding(bottom = 8.dp)) }
+
+        items(TravelRepository.allDestinations) { dest ->
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)), shape = RoundedCornerShape(12.dp)) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(dest.icon(), contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(8.dp))
+                        Text(dest.name, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = MaterialTheme.colorScheme.onSurface)
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text("Base Cost / Entrance:", fontSize = 12.sp, color = TextGray)
+                    Text("₱${"%.2f".format(dest.baseCost)}", fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha=0.1f))
+
+                    Text("Available Activities:", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
+                    Spacer(Modifier.height(4.dp))
+
+                    if (dest.activities.isEmpty()) {
+                        Text("No activities listed.", fontSize = 12.sp, color = TextGray)
+                    } else {
+                        dest.activities.forEach { activity ->
+                            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(activity.name, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
+                                Text("₱${"%.2f".format(activity.price)}", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DestinationDetailSheet(dest: Destination, onDismiss: () -> Unit) {
+fun DestinationDetailSheet(dest: Destination, planner: PlannerSystem, onDismiss: () -> Unit) {
     val context = LocalContext.current
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color.White) {
-        Column(modifier = Modifier.padding(16.dp).padding(bottom = 32.dp)) {
-            Image(
-                painter = painterResource(id = dest.imageResId),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(16.dp))
-            )
+    var showAddReview by remember { mutableStateOf(false) }
+    val reviews = TravelRepository.destinationReviews[dest.id] ?: mutableListOf()
 
+    if (showAddReview) {
+        AddReviewDialog(
+            onDismiss = { showAddReview = false },
+            onSubmit = { rating, comment ->
+                if (TravelRepository.destinationReviews[dest.id] == null) TravelRepository.destinationReviews[dest.id] = mutableListOf()
+                TravelRepository.destinationReviews[dest.id]?.add(Review(planner.ownerName, rating, comment))
+                showAddReview = false
+            }
+        )
+    }
+
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surface) {
+        Column(modifier = Modifier.padding(16.dp).padding(bottom = 32.dp)) {
+            Image(painter = painterResource(id = dest.imageResId), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(16.dp)))
             Spacer(modifier = Modifier.height(16.dp))
-            Text(dest.name, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = TextDark)
+            Text(dest.name, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.LocationOn, contentDescription = null, tint = AccentOrange, modifier = Modifier.size(16.dp))
                 Text(dest.location, color = TextGray, fontSize = 14.sp)
             }
             Spacer(modifier = Modifier.height(12.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Star, contentDescription = null, tint = AccentOrange, modifier = Modifier.size(18.dp)); Text(" ${dest.rating} • ${dest.category()}", fontWeight = FontWeight.Bold, color = TextDark) }
-                Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.WbSunny, contentDescription = null, tint = AccentOrange, modifier = Modifier.size(18.dp)); Text(" ${dest.weather}", fontSize = 14.sp, color = TextDark) }
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(dest.description, fontSize = 15.sp, color = TextDark, lineHeight = 24.sp)
-            Spacer(modifier = Modifier.height(24.dp))
+            Text(dest.description, fontSize = 15.sp, lineHeight = 24.sp, color = MaterialTheme.colorScheme.onSurface)
 
+            Spacer(modifier = Modifier.height(16.dp))
             Button(
                 onClick = {
                     val gmmIntentUri = Uri.parse("google.navigation:q=${dest.latitude},${dest.longitude}")
@@ -715,246 +549,177 @@ fun DestinationDetailSheet(dest: Destination, onDismiss: () -> Unit) {
                     if (mapIntent.resolveActivity(context.packageManager) != null) context.startActivity(mapIntent)
                     else context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/maps/dir/?api=1&destination=${dest.latitude},${dest.longitude}")))
                 },
-                modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
-            ) { Icon(Icons.Default.Directions, contentDescription = null); Spacer(Modifier.width(8.dp)); Text("Navigate with Google Maps", fontSize = 16.sp) }
+                modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(12.dp)
+            ) { Icon(Icons.Default.Directions, contentDescription = null); Spacer(Modifier.width(8.dp)); Text("Navigate with Google Maps") }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 24.dp))
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("Reviews (${reviews.size})", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                TextButton(onClick = { showAddReview = true }) { Text("Write a Review") }
+            }
+
+            if (reviews.isEmpty()) {
+                Text("No reviews yet. Be the first to review!", color = TextGray, fontSize = 14.sp, modifier = Modifier.padding(vertical = 8.dp))
+            } else {
+                reviews.forEach { review ->
+                    Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(review.author, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
+                            Spacer(Modifier.weight(1f))
+                            repeat(5) { index ->
+                                Icon(if (index < review.rating) Icons.Default.Star else Icons.Default.StarBorder, contentDescription = null, tint = AccentOrange, modifier = Modifier.size(14.dp))
+                            }
+                        }
+                        Text(review.comment, fontSize = 14.sp, color = TextGray)
+                    }
+                }
+            }
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CheckoutSheet(booking: BookingSystem, onDismiss: () -> Unit, onSuccess: (String) -> Unit) {
-    val paymentOptions = listOf("Credit/Debit Card", "GCash / Online", "Pay in Cash")
-    var selectedMethod by remember { mutableStateOf("Credit/Debit Card") }
+fun AddReviewDialog(onDismiss: () -> Unit, onSubmit: (Int, String) -> Unit) {
+    var rating by remember { mutableIntStateOf(5) }
+    var comment by remember { mutableStateOf("") }
 
-    var cardNumber by remember { mutableStateOf("") }
-    var accountNumber by remember { mutableStateOf("") }
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Card(shape = RoundedCornerShape(16.dp)) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Write a Review", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(16.dp))
 
-    var isProcessing by remember { mutableStateOf(false) }
-    var isPaymentComplete by remember { mutableStateOf(false) }
-
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color.White) {
-        Column(modifier = Modifier.padding(16.dp).padding(bottom = 32.dp)) {
-
-            if (isPaymentComplete) {
-                Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(80.dp), tint = Color(0xFF16A34A))
-                    Spacer(Modifier.height(16.dp))
-                    Text("Payment Complete!", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = TextDark)
-                    Text("Your trip has been successfully booked.", color = TextGray)
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Button(
-                        onClick = { onSuccess(selectedMethod) },
-                        modifier = Modifier.fillMaxWidth().height(50.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
-                    ) {
-                        Text("View My Ticket", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-            } else {
-                Text("Payment Method", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = TextDark)
-                Spacer(Modifier.height(16.dp))
-
-                paymentOptions.forEach { method ->
-                    val isSelected = selectedMethod == method
-                    Row(
-                        modifier = Modifier.fillMaxWidth().clickable { selectedMethod = method }
-                            .background(if (isSelected) PrimaryBlue.copy(alpha = 0.1f) else Color.Transparent, RoundedCornerShape(12.dp))
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(selected = isSelected, onClick = { selectedMethod = method }, colors = RadioButtonDefaults.colors(selectedColor = PrimaryBlue))
-                        Spacer(Modifier.width(8.dp))
-                        Icon(
-                            imageVector = when(method) { "Credit/Debit Card" -> Icons.Default.CreditCard; "GCash / Online" -> Icons.Default.QrCode; else -> Icons.Default.Money },
-                            contentDescription = null, tint = PrimaryBlue
-                        )
-                        Spacer(Modifier.width(12.dp))
-                        Text(method, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal, color = TextDark)
-                    }
-                    Spacer(Modifier.height(8.dp))
-                }
-
-                HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = BgLight)
-
-                when (selectedMethod) {
-                    "Credit/Debit Card" -> {
-                        OutlinedTextField(
-                            value = cardNumber,
-                            onValueChange = { if (it.length <= 16) cardNumber = it },
-                            label = { Text("Card Number") },
-                            modifier = Modifier.fillMaxWidth(),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
-                    "GCash / Online" -> {
-                        OutlinedTextField(
-                            value = accountNumber,
-                            onValueChange = { accountNumber = it },
-                            label = { Text("GCash/Maya Mobile Number") },
-                            modifier = Modifier.fillMaxWidth(),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Box(
-                            modifier = Modifier.fillMaxWidth().height(150.dp).border(1.dp, TextGray, RoundedCornerShape(12.dp)).background(BgLight),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(Icons.Default.QrCode2, contentDescription = "QR Code", modifier = Modifier.size(100.dp), tint = PrimaryBlue)
-                                Text("Scan to Pay with GCash", fontSize = 12.sp, color = TextGray)
-                            }
+                Row(horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth()) {
+                    repeat(5) { index ->
+                        IconButton(onClick = { rating = index + 1 }) {
+                            Icon(if (index < rating) Icons.Default.Star else Icons.Default.StarBorder, contentDescription = null, tint = AccentOrange, modifier = Modifier.size(32.dp))
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
                     }
-                    "Pay in Cash" -> {
-                        Text("Please prepare the exact amount upon boarding. A confirmation email will be sent to you.", fontSize = 14.sp, color = TextGray)
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
-                }
-
-                Row(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Total to Pay", fontWeight = FontWeight.Bold, color = TextGray)
-                    Text("₱${"%.2f".format(booking.calculateTotal())}", fontWeight = FontWeight.ExtraBold, fontSize = 20.sp, color = PrimaryBlue)
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = comment, onValueChange = { comment = it }, label = { Text("Share your experience...") }, modifier = Modifier.fillMaxWidth(), minLines = 3
+                )
 
-                Button(
-                    onClick = {
-                        if (selectedMethod == "Credit/Debit Card" && cardNumber.length < 16) {
-                        } else {
-                            isProcessing = true
-                            kotlinx.coroutines.MainScope().launch {
-                                delay(1500)
-                                isProcessing = false
-                                isPaymentComplete = true
-                            }
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                    Button(onClick = { if (comment.isNotBlank()) onSubmit(rating, comment) }, modifier = Modifier.padding(start = 8.dp)) { Text("Submit") }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun TermsAndPolicyDialog(onDismiss: () -> Unit) {
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Card(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().height(400.dp)) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Terms & Privacy Policy", fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 16.dp))
+
+                Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    LazyColumn {
+                        item {
+                            Text("1. Acceptance of Terms", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text("By using NasugBrowse, you agree to these terms. This app is an informational itinerary planner and does not handle direct financial transactions or bookings.", fontSize = 12.sp, color = TextGray, modifier = Modifier.padding(bottom = 12.dp))
+
+                            Text("2. User Accounts", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text("You are responsible for maintaining the confidentiality of your account details. The data you enter is stored locally on your device.", fontSize = 12.sp, color = TextGray, modifier = Modifier.padding(bottom = 12.dp))
+
+                            Text("3. Pricing & Accuracy", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text("Prices listed in the Price Guide are estimates. Actual costs may vary based on the season, resort policies, or local fees. We are not responsible for any discrepancies.", fontSize = 12.sp, color = TextGray, modifier = Modifier.padding(bottom = 12.dp))
+
+                            Text("4. Privacy Policy", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text("We respect your privacy. NasugBrowse does not collect, upload, or share your personal data, location, or reviews to any external servers. All information remains safely within your device.", fontSize = 12.sp, color = TextGray)
                         }
-                    },
-                    modifier = Modifier.fillMaxWidth().height(50.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue)
-                ) {
-                    if (isProcessing) {
-                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
-                    } else {
-                        Text("Pay ₱${"%.2f".format(booking.calculateTotal())}", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     }
                 }
-            }
-        }
-    }
-}
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun TicketDetailSheet(ticket: TripTicket, onDismiss: () -> Unit, onCancel: () -> Unit) {
-    val context = LocalContext.current
-    val dateFormatter = DateFormat.getMediumDateFormat(context)
-    val isCancelled = ticket.status == TicketStatus.CANCELLED
-
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color.White) {
-        Column(modifier = Modifier.padding(16.dp).padding(bottom = 32.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("Receipt", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = TextDark)
-                if (isCancelled) {
-                    Surface(color = Color(0xFFFEE2E2), shape = RoundedCornerShape(8.dp)) { Text("CANCELLED", color = Color(0xFF991B1B), modifier = Modifier.padding(8.dp), fontWeight = FontWeight.Bold, fontSize = 12.sp) }
-                }
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text("Ticket ID: ${ticket.ticketId}", fontWeight = FontWeight.Bold, color = TextDark)
-            Text("Date Booked: ${dateFormatter.format(ticket.bookingDate)}", fontSize = 14.sp, color = TextGray)
-            ticket.startTime?.let {
-                Text("Start Time: $it", fontSize = 14.sp, color = TextGray)
-            }
-            Text("Payment: ${ticket.paymentMethod}", fontSize = 14.sp, color = TextGray)
-
-            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = BgLight)
-
-            Text("Destinations:", fontWeight = FontWeight.Bold, color = TextDark)
-            ticket.destinations.forEach { Text("- ${it.name} (x${ticket.travelers})", fontSize = 14.sp, color = TextGray) }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            if (ticket.vehicle != null) {
-                Text("Driver Details:", fontWeight = FontWeight.Bold, color = TextDark)
-                Text("Name: ${ticket.vehicle.driverName}", fontSize = 14.sp, color = TextGray)
-                Text("Plate No: ${ticket.vehicle.plateNumber}", fontSize = 14.sp, color = TextGray)
-                Text("Phone: ${ticket.vehicle.driverPhone}", fontSize = 14.sp, color = TextGray)
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                OutlinedButton(
-                    onClick = {
-                        val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${ticket.vehicle.driverPhone}"))
-                        context.startActivity(intent)
-                    },
-                    modifier = Modifier.fillMaxWidth().height(40.dp),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Icon(Icons.Default.Phone, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Call Driver", fontWeight = FontWeight.Bold)
-                }
-            } else {
-                Text("Transportation:", fontWeight = FontWeight.Bold, color = TextDark)
-                Text("- None", fontSize = 14.sp, color = TextGray)
-            }
-
-            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = BgLight)
-
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("TOTAL PAID", fontWeight = FontWeight.Bold, color = TextDark)
-                Text("₱${"%.2f".format(ticket.totalPaid)}", fontWeight = FontWeight.ExtraBold, fontSize = 20.sp, color = PrimaryBlue)
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Box(modifier = Modifier.fillMaxWidth().height(60.dp).background(TextDark, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
-                Text("|||| ||| || |||| ||| || |||| ||| ||", color = Color.White, letterSpacing = 4.sp, fontSize = 20.sp, modifier = Modifier.alpha(0.8f))
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            if (!isCancelled) {
-                Button(
-                    onClick = onCancel,
-                    modifier = Modifier.fillMaxWidth().height(50.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
-                ) {
-                    Text("Cancel Booking", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                }
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("I Understand") }
             }
         }
     }
 }
 
 // =====================================================
-// 9. REUSABLE & PROFILE
+// 8. HELPERS & PROFILE
 // =====================================================
+@Composable
+fun CustomTimePickerDialog(onDismiss: () -> Unit, onTimeSelected: (String) -> Unit) {
+    val hours = (1..12).toList()
+    val minutes = (0..59).map { String.format("%02d", it) }
+    val periods = listOf("AM", "PM")
+
+    val hourState = rememberLazyListState(initialFirstVisibleItemIndex = 9)
+    val minuteState = rememberLazyListState(initialFirstVisibleItemIndex = 0)
+    val periodState = rememberLazyListState(initialFirstVisibleItemIndex = 0)
+
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Card(shape = RoundedCornerShape(16.dp)) {
+            Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("Set Start Time", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(modifier = Modifier.height(120.dp), horizontalArrangement = Arrangement.Center) {
+                    WheelPicker(items = hours, state = hourState, modifier = Modifier.weight(1f))
+                    Text(":", fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.CenterVertically).padding(horizontal = 8.dp))
+                    WheelPicker(items = minutes, state = minuteState, modifier = Modifier.weight(1f))
+                    WheelPicker(items = periods, state = periodState, modifier = Modifier.weight(1f))
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                    Button(
+                        onClick = {
+                            val h = hours.getOrElse(hourState.firstVisibleItemIndex) { 10 }
+                            val m = minutes.getOrElse(minuteState.firstVisibleItemIndex) { 0 }
+                            val p = periods.getOrElse(periodState.firstVisibleItemIndex) { "AM" }
+                            onTimeSelected(String.format("%02d:%s %s", h, m, p))
+                        },
+                        modifier = Modifier.padding(start = 8.dp)
+                    ) { Text("OK") }
+                }
+            }
+        }
+    }
+}
 
 @Composable
-fun FavoritesScreen(booking: BookingSystem, onDetails: (Destination) -> Unit) {
-    if (booking.favoriteDestinations.isEmpty()) {
+fun <T> WheelPicker(items: List<T>, state: androidx.compose.foundation.lazy.LazyListState, modifier: Modifier = Modifier) {
+    Box(modifier = modifier.fillMaxHeight(), contentAlignment = Alignment.Center) {
+        LazyColumn(
+            state = state, modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, contentPadding = PaddingValues(vertical = 44.dp)
+        ) {
+            items(items.size) { index ->
+                val isSelected = state.firstVisibleItemIndex == index
+                Text(
+                    text = items[index].toString(), fontSize = if (isSelected) 24.sp else 18.sp,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                    color = if (isSelected) MaterialTheme.colorScheme.primary else TextGray,
+                    modifier = Modifier.padding(vertical = 4.dp).graphicsLayer {
+                        val offset = (state.firstVisibleItemScrollOffset / 100f).coerceIn(0f, 1f)
+                        alpha = if (isSelected) 1f else 0.5f
+                    }
+                )
+            }
+        }
+        Box(modifier = Modifier.fillMaxWidth().height(36.dp).border(1.dp, TextGray.copy(alpha=0.3f), RoundedCornerShape(8.dp)))
+    }
+}
+
+@Composable
+fun FavoritesScreen(planner: PlannerSystem, onDetails: (Destination) -> Unit) {
+    if (planner.favoriteDestinations.isEmpty()) {
         EmptyState("No saved places", "Tap the heart icon to save it here.")
     } else {
         LazyVerticalGrid(columns = GridCells.Fixed(2), contentPadding = PaddingValues(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            items(booking.favoriteDestinations, key = { it.id }) { dest ->
+            items(planner.favoriteDestinations, key = { it.id }) { dest ->
                 Card(modifier = Modifier.clickable { onDetails(dest) }, shape = RoundedCornerShape(16.dp)) {
                     Column {
-                        Image(
-                            painter = painterResource(id = dest.imageResId),
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.height(120.dp).fillMaxWidth()
-                        )
+                        Image(painter = painterResource(id = dest.imageResId), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.height(120.dp).fillMaxWidth())
                         Text(dest.name, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.padding(8.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
@@ -964,26 +729,44 @@ fun FavoritesScreen(booking: BookingSystem, onDetails: (Destination) -> Unit) {
 }
 
 @Composable
-fun ProfileScreen(booking: BookingSystem, onLogout: () -> Unit) {
+fun ProfileScreen(planner: PlannerSystem, isDarkMode: Boolean, onToggleTheme: () -> Unit, onLogout: () -> Unit, onShowTerms: () -> Unit) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Spacer(modifier = Modifier.height(32.dp))
-        Icon(Icons.Default.AccountCircle, contentDescription = null, modifier = Modifier.size(100.dp), tint = PrimaryBlue)
-        Text(booking.ownerName, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = TextDark)
-        Text(booking.ownerEmail, color = TextGray)
+        Icon(Icons.Default.AccountCircle, contentDescription = null, modifier = Modifier.size(100.dp), tint = MaterialTheme.colorScheme.primary)
+        Text(planner.ownerName, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
+        Text(planner.ownerEmail, color = Color.White.copy(alpha = 0.8f))
         Spacer(modifier = Modifier.height(32.dp))
 
-        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(2.dp)) {
+        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f))) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Saved Destinations", color = TextDark); Text("${booking.favoriteDestinations.size}", fontWeight = FontWeight.Bold, color = PrimaryBlue) }
-                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = BgLight)
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Active Tickets", color = TextDark); Text("${booking.confirmedTickets.count { it.status == TicketStatus.ACTIVE }}", fontWeight = FontWeight.Bold, color = PrimaryBlue) }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Saved Destinations", color = MaterialTheme.colorScheme.onSurface)
+                    Text("${planner.favoriteDestinations.size}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                }
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Itinerary Items", color = MaterialTheme.colorScheme.onSurface)
+                    Text("${planner.scheduledVisits.size}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                }
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+
+                Row(modifier = Modifier.fillMaxWidth().clickable { onShowTerms() }, horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Terms & Privacy Policy", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                    Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface)
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Dark Mode", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                    Switch(checked = isDarkMode, onCheckedChange = { onToggleTheme() })
+                }
             }
         }
 
         Spacer(modifier = Modifier.weight(1f))
         OutlinedButton(
             onClick = onLogout, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFDC2626)), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFDC2626))
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red), border = androidx.compose.foundation.BorderStroke(1.dp, Color.Red)
         ) {
             Icon(Icons.Default.Logout, contentDescription = null); Spacer(Modifier.width(8.dp)); Text("Log Out", fontWeight = FontWeight.Bold)
         }
@@ -993,9 +776,9 @@ fun ProfileScreen(booking: BookingSystem, onLogout: () -> Unit) {
 @Composable
 fun EmptyState(title: String, subtitle: String) {
     Column(modifier = Modifier.fillMaxSize().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        Icon(Icons.Default.SearchOff, contentDescription = null, modifier = Modifier.size(80.dp), tint = TextGray.copy(alpha = 0.5f))
+        Icon(Icons.Default.SearchOff, contentDescription = null, modifier = Modifier.size(80.dp), tint = Color.White.copy(alpha = 0.5f))
         Spacer(modifier = Modifier.height(16.dp))
-        Text(title, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = TextDark)
-        Text(subtitle, textAlign = TextAlign.Center, color = TextGray)
+        Text(title, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Color.White)
+        Text(subtitle, textAlign = TextAlign.Center, color = Color.White.copy(alpha = 0.8f))
     }
 }
